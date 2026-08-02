@@ -2,17 +2,21 @@
 
 当前 live skill 位于 `C:\Users\HP\.codex\skills\slidev-editable-pptx`。
 
-本仓库按 `versions/<semver>/` 保存历史快照，旧版本不会被新版本覆盖。
+本仓库只保留当前版本快照 `versions/<current>/`，Git 历史作为版本备份；旧快照和旧标签会在发布新版本时删除。
 
 ## 当前版本
 
-- `0.0.3`
+- `0.0.4`
 
-## 版本历史
+## Commit 内容确认规则
 
-- `0.0.1`
-- `0.0.2`
-- `0.0.3`
+每次进行 Git 版本更新前，必须先询问用户本次 commit 要补充的内容，并等待用户确认后再提交。
+
+如果用户没有提供特定内容，则使用默认信息：
+
+```text
+chore: version slidev-editable-pptx 0.0.4
+```
 
 ## SSH 推送规则
 
@@ -32,8 +36,9 @@ live skill 内已保存 `references/versioning.md`，后续任何新对话修改
 ## 后续版本流程
 
 1. 在 live skill 原文件基础上修改或调整。
-2. 将 live skill 中的 `VERSION` 更新为下一个版本，例如 `0.0.3`。
-3. 将 live skill 复制为本仓库的 `versions/0.0.3/`。
-4. 同步更新仓库根目录 `VERSION` 为 `0.0.3`。
-5. 提交 Git 并打标签 `v0.0.3`。
-6. 推送到 GitHub 仓库。
+2. 询问用户本次 commit 要补充的内容并等待回复。
+3. 将 live skill 中的 `VERSION` 更新为下一个版本。
+4. 将 live skill 复制为本仓库的 `versions/<next>/`。
+5. 删除其他旧版本文件夹和旧标签。
+6. 使用用户确认的 commit 内容提交 Git，并打对应标签。
+7. 通过 SSH 推送到 GitHub 仓库。

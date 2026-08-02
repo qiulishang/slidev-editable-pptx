@@ -10,13 +10,20 @@ This file is the canonical process for updating and saving the skill. Follow it 
 - SSH key: `C:\Users\HP\.ssh\id_ed25519_slidev_skill`
 - GitHub CLI: `C:\Users\HP\AppData\Local\Programs\GitHub CLI\bin\gh.exe`
 
-## Required Rules
+## Version Policy
 
-- Never overwrite an existing version folder such as `versions/0.0.1/`.
-- Save every modification as a new semantic version, for example `0.0.2`, `0.0.3`.
+- Git history is the canonical backup. Do not keep multiple old version snapshots.
+- Keep only the current version snapshot under `versions/<current>/`.
+- Delete obsolete version folders and tags from local and GitHub when publishing a new version.
 - Keep the live skill at the latest version so Codex can still discover it.
-- Push both the branch and the version tag to GitHub.
 - Always push through the SSH remote and the dedicated deploy key. Do not switch the remote back to HTTPS.
+
+## Commit Confirmation
+
+- Before every version update, ask the user what content to include in the version commit message.
+- Wait for the user's response before creating the commit.
+- If the user provides content, use it as the commit message.
+- If the user has no specific content, use `chore: version slidev-editable-pptx <version>`.
 
 ## Push Protocol
 
@@ -42,7 +49,7 @@ If the repository is cloned again on another machine, configure both the remote 
 Get-Content -LiteralPath "C:\Users\HP\.codex\skills\slidev-editable-pptx\VERSION" -Encoding UTF8
 ```
 
-2. Decide the next version by incrementing the patch number, for example `0.0.1` becomes `0.0.2`.
+2. Ask the user what content to include in the version commit and wait for the response.
 
 3. Modify the live skill files under `C:\Users\HP\.codex\skills\slidev-editable-pptx`.
 
@@ -53,33 +60,45 @@ Get-Content -LiteralPath "C:\Users\HP\.codex\skills\slidev-editable-pptx\VERSION
 ```powershell
 $live = "C:\Users\HP\.codex\skills\slidev-editable-pptx"
 $repo = "C:\Users\HP\Documents\GitHub\slidev-editable-pptx"
-$next = "0.0.2"
+$next = "0.0.5"
 Copy-Item -LiteralPath $live -Destination "$repo\versions\$next" -Recurse -Force
 ```
 
-6. Update the repository root `VERSION`:
+6. Remove all other `versions/<old>/` folders from the repository.
 
-```powershell
-Set-Content -LiteralPath "$repo\VERSION" -Value $next -Encoding ascii
-```
+7. Update the repository root `VERSION` and the current version list in `$repo\README.md`.
 
-7. Update the current version list in `$repo\README.md`.
-
-8. Commit, tag, and push through SSH:
+8. Commit with the user-confirmed commit message:
 
 ```powershell
 git -C $repo add -A
-git -C $repo commit -m "chore: version slidev-editable-pptx $next"
+git -C $repo commit -m "<user-confirmed commit message>"
+```
+
+9. Tag and push through SSH:
+
+```powershell
 git -C $repo tag "v$next"
 git -C $repo push origin main --tags
 ```
 
-9. Verify:
+10. Delete obsolete local tags:
+
+```powershell
+git -C $repo tag -d v0.0.1 v0.0.2
+```
+
+11. Delete obsolete remote tags:
+
+```powershell
+git -C $repo push origin --delete refs/tags/v0.0.1 refs/tags/v0.0.2
+```
+
+12. Verify:
 
 ```powershell
 git -C $repo status --short --branch
 git -C $repo ls-remote --tags origin
-gh auth status
 ```
 
 If `gh` is not on `PATH`, use the full path:
@@ -90,6 +109,4 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
-- `0.0.1`: initial version.
-- `0.0.2`: added this version workflow into the skill itself.
-- `0.0.3`: documented the SSH deploy key push protocol as the permanent update path.
+- `0.0.4`: optimized versions `0.0.1` through `0.0.3`, keep only the current snapshot, and added the commit content confirmation rule.
