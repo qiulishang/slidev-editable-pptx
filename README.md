@@ -6,12 +6,24 @@
 
 ## 当前版本
 
-- `0.0.2`
+- `0.0.3`
 
 ## 版本历史
 
 - `0.0.1`
 - `0.0.2`
+- `0.0.3`
+
+## SSH 推送规则
+
+后续推送统一使用 SSH，不使用 HTTPS：
+
+```powershell
+git remote set-url origin "git@github.com:qiulishang/slidev-editable-pptx.git"
+git config core.sshCommand "ssh -i C:/Users/HP/.ssh/id_ed25519_slidev_skill -o IdentitiesOnly=yes"
+```
+
+该规则已写入 live skill 的 `references/versioning.md`，后续新对话应直接遵循。
 
 ## 独立于对话的流程
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Slidev Editable PPTX"
+  short_description: "Export editable PPTX with strict typography and layout"
+  default_prompt: "Use $slidev-editable-pptx to regenerate an editable PPTX from a Slidev lecture deck with the workspace layout rules."
