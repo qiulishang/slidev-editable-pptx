@@ -67,7 +67,7 @@ Keep one shared Slidev dependency project at `C:\Users\HP\OneDrive\Desktop\è¯¾ç¨
 
 - Before modifying or versioning this skill, read `references/versioning.md` and follow it exactly in every new conversation.
 - Before creating any version commit, ask the user what content to include in the commit message and wait for a response.
-- Keep only the current version snapshot; delete obsolete snapshots and tags from local and GitHub as part of each version update.
+- Keep only the current version snapshot directly at the repository root; delete obsolete snapshots and tags from local and GitHub as part of each version update.
 - Always push updates through the SSH deploy key documented in `references/versioning.md`; do not switch back to HTTPS.
 - Keep `scripts/export-editable-pptx.mjs` in sync with the workspace `tools/export-editable-pptx.mjs`.
 - Update this SKILL.md and the workspace `AGENTS.md` together when export rules change.

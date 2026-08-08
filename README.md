@@ -2,11 +2,11 @@
 
 当前 live skill 位于 `C:\Users\HP\.codex\skills\slidev-editable-pptx`。
 
-本仓库只保留当前版本快照 `versions/<current>/`，Git 历史作为版本备份；旧快照和旧标签会在发布新版本时删除。
+本仓库只保留当前版本快照，且当前版本文件直接平铺在仓库根目录，与 `README.md`、`VERSION` 同级；不保留 `versions/<version>/` 文件夹。Git 历史作为版本备份，旧快照和旧标签会在发布新版本时删除。
 
 ## 当前版本
 
-- `0.0.5`
+- `0.0.6`
 
 ## Commit 内容确认规则
 
@@ -15,7 +15,7 @@
 如果用户没有提供特定内容，则使用默认信息：
 
 ```text
-chore: version slidev-editable-pptx 0.0.5
+chore: version slidev-editable-pptx 0.0.6
 ```
 
 ## SSH 推送规则

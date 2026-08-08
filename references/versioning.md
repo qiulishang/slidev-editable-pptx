@@ -13,8 +13,8 @@ This file is the canonical process for updating and saving the skill. Follow it 
 ## Version Policy
 
 - Git history is the canonical backup. Do not keep multiple old version snapshots.
-- Keep only the current version snapshot under `versions/<current>/`.
-- Delete obsolete version folders and tags from local and GitHub when publishing a new version.
+- Keep only the current version snapshot directly at the repository root, beside `README.md` and `VERSION`.
+- Do not keep a `versions/<version>/` folder. Delete obsolete snapshots and tags from local and GitHub when publishing a new version.
 - Keep the live skill at the latest version so Codex can still discover it.
 - Always push through the SSH remote and the dedicated deploy key. Do not switch the remote back to HTTPS.
 
@@ -55,16 +55,19 @@ Get-Content -LiteralPath "C:\Users\HP\.codex\skills\slidev-editable-pptx\VERSION
 
 4. Update the live `VERSION` file to the next version.
 
-5. Copy the complete live skill into a new version folder:
+5. Flatten the complete live skill directly into the repository root:
 
 ```powershell
 $live = "C:\Users\HP\.codex\skills\slidev-editable-pptx"
 $repo = "C:\Users\HP\Documents\GitHub\slidev-editable-pptx"
-$next = "0.0.5"
-Copy-Item -LiteralPath $live -Destination "$repo\versions\$next" -Recurse -Force
+Copy-Item -Path "$live\*" -Destination $repo -Recurse -Force
 ```
 
-6. Remove all other `versions/<old>/` folders from the repository.
+6. Remove the `versions` folder from the repository so `README.md`, `VERSION`, `SKILL.md`, `agents/`, `references/`, and `scripts/` are all at the same level.
+
+```powershell
+Remove-Item -LiteralPath "$repo\versions" -Recurse -Force
+```
 
 7. Update the repository root `VERSION` and the current version list in `$repo\README.md`.
 
@@ -109,5 +112,6 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
+- `0.0.6`: flatten the version snapshot into the repository root and remove the `versions/<version>/` hierarchy.
 - `0.0.5`: default no Slidev dev server, shared dependency runner, blank-slide and slide-count preflight, unify Chinese font naming as 宋体.
 - `0.0.4`: optimized versions `0.0.1` through `0.0.3`, keep only the current snapshot, and added the commit content confirmation rule.
