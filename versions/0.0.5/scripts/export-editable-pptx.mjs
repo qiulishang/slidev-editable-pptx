@@ -13,6 +13,10 @@ function arg(name, fallback = '') {
   return process.env[`PPTX_${name.toUpperCase().replaceAll('-', '_')}`] || fallback;
 }
 
+function hasFlag(name) {
+  return process.argv.includes(`--${name}`);
+}
+
 function findBrowser() {
   const candidates = [
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -478,10 +482,28 @@ function validateSlideLayout(data, fit, slideIndex = 0) {
   }
 }
 
+function validateNoBlankSlides(slides, allowBlank = false) {
+  if (!slides.length) {
+    throw new Error('Editable PPTX validation failed: no slides found.');
+  }
+  if (allowBlank) {
+    return;
+  }
+  const blank = slides
+    .map((data, index) => (data.groups.length ? null : index + 1))
+    .filter(Boolean);
+  if (blank.length) {
+    throw new Error(`Editable PPTX validation failed: blank slide(s) ${blank.join(', ')}. Use --allow-blank to permit intentional blank slides.`);
+  }
+}
+
 const entry = arg('entry', 'slides.md');
 const output = arg('output');
 const executablePath = arg('executable-path') || findBrowser();
 const portArg = Number(arg('port', '0')) || 0;
+const checkOnly = hasFlag('check-only');
+const allowBlank = hasFlag('allow-blank');
+const expectedSlides = Number(arg('expected-slides', '0')) || 0;
 
 const requireFromProject = createRequire(path.resolve(process.cwd(), 'package.json'));
 const cliPackagePath = requireFromProject.resolve('@slidev/cli/package.json');
@@ -506,77 +528,89 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.slidev-slide-loading').length === 0);
 
   const slides = await extractFromBrowser(page);
-  const first = slides[0];
-  const layoutName = 'slidev-editable';
-  const pptx = new PptxGenJS();
-  pptx.defineLayout({
-    name: layoutName,
-    width: first.width / 96,
-    height: first.height / 96,
-  });
-  pptx.layout = layoutName;
-  pptx.author = 'Slidev editable export';
-  pptx.company = 'Created using Slidev';
-
-  for (const [slideIndex, data] of slides.entries()) {
-    const slide = pptx.addSlide();
-    slide.background = { color: 'FFFFFF' };
-    const fit = fitSlide(data);
-    validateSlideLayout(data, fit, slideIndex);
-
-    for (const shape of data.shapes) {
-      const shapeOptions = {
-        x: pxToInch(shape.x, fit.scale, fit.layoutOffsetX + fit.centerOffsetX),
-        y: pxToInch(shape.y, fit.scale, fit.layoutOffsetY + fit.centerOffsetY),
-        w: pxToInch(shape.w, fit.scale),
-        h: pxToInch(shape.h, fit.scale),
-        fill: { color: shape.fill },
-      };
-      if (shape.type === 'roundRect') {
-        shapeOptions.rectRadius = Math.min(0.5, shape.radius / Math.min(shape.w, shape.h));
-      }
-      slide.addShape(shape.type, shapeOptions);
-    }
-
-    for (const group of data.groups) {
-      const centerX = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetX;
-      const centerY = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetY;
-      const textRuns = [];
-      for (const run of group.textRuns) {
-        const fontParts = splitByFont(run.text);
-        for (const part of fontParts) {
-          textRuns.push({
-            text: part.text,
-            options: {
-              fontSize: pxToPt(run.opts.fontSize * group.fontScale, fit.scale),
-              bold: run.opts.bold,
-              italic: run.opts.italic,
-              color: run.opts.color,
-              fontFace: part.font,
-            },
-          });
-        }
-      }
-      slide.addText(textRuns, {
-        x: pxToInch(group.x, fit.scale, fit.layoutOffsetX + centerX),
-        y: pxToInch(group.y, fit.scale, fit.layoutOffsetY + centerY),
-        w: pxToInch(group.w, fit.scale),
-        h: pxToInch(group.h, fit.scale),
-        margin: 0,
-        valign: 'top',
-        align: group.align,
-        fit: 'none',
-        wrap: group.wraps,
-        isTextBox: true,
-        lineSpacingMultiple: group.lineSpacingMultiple,
-      });
-    }
+  validateNoBlankSlides(slides, allowBlank);
+  if (expectedSlides && slides.length !== expectedSlides) {
+    throw new Error(`Editable PPTX validation failed: expected ${expectedSlides} slides, found ${slides.length}.`);
   }
+  if (checkOnly) {
+    const blankSlides = slides.filter((data) => data.groups.length === 0).length;
+    console.log(`Checked ${slides.length} editable slides (${blankSlides} blank).`);
+  } else {
+    if (!output) {
+      throw new Error('Missing required --output path.');
+    }
+    const first = slides[0];
+    const layoutName = 'slidev-editable';
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({
+      name: layoutName,
+      width: first.width / 96,
+      height: first.height / 96,
+    });
+    pptx.layout = layoutName;
+    pptx.author = 'Slidev editable export';
+    pptx.company = 'Created using Slidev';
 
-  const target = path.resolve(process.cwd(), output || 'slides-editable.pptx');
-  const buffer = await pptx.write({ outputType: 'nodebuffer' });
-  await fs.writeFile(target, buffer);
-  console.log(`Exported ${slides.length} editable slides to ${target}`);
+    for (const [slideIndex, data] of slides.entries()) {
+      const slide = pptx.addSlide();
+      slide.background = { color: 'FFFFFF' };
+      const fit = fitSlide(data);
+      validateSlideLayout(data, fit, slideIndex);
+
+      for (const shape of data.shapes) {
+        const shapeOptions = {
+          x: pxToInch(shape.x, fit.scale, fit.layoutOffsetX + fit.centerOffsetX),
+          y: pxToInch(shape.y, fit.scale, fit.layoutOffsetY + fit.centerOffsetY),
+          w: pxToInch(shape.w, fit.scale),
+          h: pxToInch(shape.h, fit.scale),
+          fill: { color: shape.fill },
+        };
+        if (shape.type === 'roundRect') {
+          shapeOptions.rectRadius = Math.min(0.5, shape.radius / Math.min(shape.w, shape.h));
+        }
+        slide.addShape(shape.type, shapeOptions);
+      }
+
+      for (const group of data.groups) {
+        const centerX = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetX;
+        const centerY = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetY;
+        const textRuns = [];
+        for (const run of group.textRuns) {
+          const fontParts = splitByFont(run.text);
+          for (const part of fontParts) {
+            textRuns.push({
+              text: part.text,
+              options: {
+                fontSize: pxToPt(run.opts.fontSize * group.fontScale, fit.scale),
+                bold: run.opts.bold,
+                italic: run.opts.italic,
+                color: run.opts.color,
+                fontFace: part.font,
+              },
+            });
+          }
+        }
+        slide.addText(textRuns, {
+          x: pxToInch(group.x, fit.scale, fit.layoutOffsetX + centerX),
+          y: pxToInch(group.y, fit.scale, fit.layoutOffsetY + centerY),
+          w: pxToInch(group.w, fit.scale),
+          h: pxToInch(group.h, fit.scale),
+          margin: 0,
+          valign: 'top',
+          align: group.align,
+          fit: 'none',
+          wrap: group.wraps,
+          isTextBox: true,
+          lineSpacingMultiple: group.lineSpacingMultiple,
+        });
+      }
+    }
+
+    const target = path.resolve(process.cwd(), output || 'slides-editable.pptx');
+    const buffer = await pptx.write({ outputType: 'nodebuffer' });
+    await fs.writeFile(target, buffer);
+    console.log(`Exported ${slides.length} editable slides to ${target}`);
+  }
 } finally {
   await browser?.close();
   await server.close();

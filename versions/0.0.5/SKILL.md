@@ -9,25 +9,34 @@ description: Export and maintain editable PPTX files from Slidev lecture decks w
 
 Generate editable PPTX files from Slidev decks by rendering slides in a browser, extracting text and panel geometry, then rebuilding slides as real PPTX text boxes. Native `slidev export --format pptx` produces full-page images, so do not use it when editable text is required.
 
+Default behavior does not start a Slidev dev server. Only start `pnpm dev` when the user explicitly asks for a live preview.
+
 ## Quick Start
 
-Run from the target Slidev project directory:
+Run from the shared dependency runner in the lecture workspace:
 
 ```powershell
-node "C:\Users\HP\.codex\skills\slidev-editable-pptx\scripts\export-editable-pptx.mjs" --entry slides.md --output "../{chapter-title}-exam-lecture.pptx"
+cd "C:\Users\HP\OneDrive\Desktop\课程\slidev-runner"
+node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entry "../细生/6/protein-sorting-lecture/slides.md" --output "../细生/6/{chapter-title}-考研精讲.pptx"
 ```
 
 The script starts Slidev, renders the print page with Playwright and Edge, extracts text and backgrounds, writes the editable PPTX, and validates layout before writing.
 
+Before export, run a lightweight slide-count check:
+
+```powershell
+node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entry "../细生/6/protein-sorting-lecture/slides.md" --check-only --expected-slides 28
+```
+
 If Edge is not installed at the default path, pass an explicit browser:
 
 ```powershell
-node "C:\Users\HP\.codex\skills\slidev-editable-pptx\scripts\export-editable-pptx.mjs" --entry slides.md --output "../{chapter-title}-exam-lecture.pptx" --executable-path "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entry "../细生/6/protein-sorting-lecture/slides.md" --output "../细生/6/{chapter-title}-考研精讲.pptx" --executable-path "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 ```
 
 ## Layout Rules
 
-- Fonts: Latin letters and digits use Times New Roman; Chinese characters use SimSun.
+- Fonts: Latin letters and digits use Times New Roman; Chinese characters use 宋体.
 - Text box width must be determined by its background panel and must not exceed the panel content area.
 - Shrink font size when text would exceed the panel; do not let text overflow the panel.
 - Prevent text box overlaps; every text box must stay inside its corresponding panel.
@@ -41,12 +50,18 @@ node "C:\Users\HP\.codex\skills\slidev-editable-pptx\scripts\export-editable-ppt
 
 The script validates before writing and throws when text boxes overlap, leave the slide, or exceed their background panel.
 
+The script also fails on blank slides and mismatched `--expected-slides` counts before writing. Use `--allow-blank` only when a blank slide is intentional.
+
 For independent verification, unzip the generated PPTX and check:
 
 - `ppt/slides/slide*.xml` contains `<a:t>` text runs.
 - No slide contains a full-page `<p:pic>` image.
-- Font runs use `<a:latin typeface="Times New Roman"/>` for Latin/digit text and `<a:ea typeface="SimSun"/>` for Chinese text.
+- Font runs use `<a:latin typeface="Times New Roman"/>` for Latin/digit text and `<a:ea typeface="宋体"/>` for Chinese text.
 - Text boxes do not overlap and stay inside their panels.
+
+## Shared Runner
+
+Keep one shared Slidev dependency project at `C:\Users\HP\OneDrive\Desktop\课程\slidev-runner`. Chapter directories only need `slides.md`; do not copy `node_modules`, package manifests, or lockfiles into every new chapter.
 
 ## Maintenance
 

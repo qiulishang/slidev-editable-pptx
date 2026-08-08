@@ -109,4 +109,5 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
+- `0.0.5`: default no Slidev dev server, shared dependency runner, blank-slide and slide-count preflight, unify Chinese font naming as 宋体.
 - `0.0.4`: optimized versions `0.0.1` through `0.0.3`, keep only the current snapshot, and added the commit content confirmation rule.

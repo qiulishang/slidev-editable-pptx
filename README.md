@@ -6,7 +6,7 @@
 
 ## 当前版本
 
-- `0.0.4`
+- `0.0.5`
 
 ## Commit 内容确认规则
 
@@ -15,7 +15,7 @@
 如果用户没有提供特定内容，则使用默认信息：
 
 ```text
-chore: version slidev-editable-pptx 0.0.4
+chore: version slidev-editable-pptx 0.0.5
 ```
 
 ## SSH 推送规则
