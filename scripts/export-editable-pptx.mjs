@@ -377,13 +377,218 @@ async function extractFromBrowser(page) {
       return {
         width: slideWidth,
         height: slideHeight,
-        centerAll: Boolean(slide.querySelector('.slidev-layout.section, .slidev-layout.cover'))
+        centerAll: Boolean(slide.querySelector(
+          '.slidev-layout.section, .slidev-layout.cover, .slidev-layout.center, .slidev-layout.intro, .slidev-layout.end, .slidev-layout.fact, .slidev-layout.statement, .slidev-layout.quote',
+        ))
           || /总结|总复习/.test(slide.textContent || ''),
         groups: groupData,
         shapes: [...syntheticShapes, ...shapes],
       };
     });
   });
+}
+
+const LAYOUT_DENSE_FILL = 0.72;
+const LAYOUT_DENSE_ITEM_COUNT = 14;
+const LAYOUT_SPARSE_FILL = 0.24;
+const LAYOUT_DENSE_CHARS = 420;
+const LAYOUT_SPARSE_CHARS = 120;
+
+function getFinalGroupBoxes(data, fit) {
+  return data.groups.map((group) => {
+    const centerX = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetX;
+    const centerY = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetY;
+    return {
+      group,
+      x1: group.x * fit.scale + fit.layoutOffsetX + centerX,
+      y1: group.y * fit.scale + fit.layoutOffsetY + centerY,
+      x2: (group.x + group.w) * fit.scale + fit.layoutOffsetX + centerX,
+      y2: (group.y + group.h) * fit.scale + fit.layoutOffsetY + centerY,
+      panelLeft: group.panelLeft * fit.scale + fit.layoutOffsetX + fit.centerOffsetX,
+      panelRight: group.panelRight * fit.scale + fit.layoutOffsetX + fit.centerOffsetX,
+    };
+  });
+}
+
+function intersectsShapeGroup(shape, group) {
+  return shape.x < group.x + group.w
+    && group.x < shape.x + shape.w
+    && shape.y < group.y + group.h
+    && group.y < shape.y + shape.h;
+}
+
+function getShapeOffsets(shape, data, fit) {
+  if (fit.centerAll || (!fit.centerOffsetX && !fit.centerOffsetY)) {
+    return { x: fit.centerOffsetX, y: fit.centerOffsetY };
+  }
+  const bodyGroups = data.groups.filter((group) => !group.isHeading);
+  const bodyMinY = bodyGroups.length
+    ? Math.min(...bodyGroups.map((group) => group.y))
+    : Number.POSITIVE_INFINITY;
+  const hasPageHeadingOverlap = data.groups.some((group) => (
+    group.isHeading
+    && group.y + group.h <= bodyMinY + 1
+    && intersectsShapeGroup(shape, group)
+  ));
+  return hasPageHeadingOverlap
+    ? { x: 0, y: 0 }
+    : { x: fit.centerOffsetX, y: fit.centerOffsetY };
+}
+
+function analyzeSlideLayout(data, fit, slideIndex) {
+  const boxes = getFinalGroupBoxes(data, fit);
+  const all = boxes.length
+    ? {
+      minX: Math.min(...boxes.map((box) => box.x1)),
+      minY: Math.min(...boxes.map((box) => box.y1)),
+      maxX: Math.max(...boxes.map((box) => box.x2)),
+      maxY: Math.max(...boxes.map((box) => box.y2)),
+    }
+    : null;
+  const headingBoxes = boxes.filter((box) => box.group.isHeading);
+  const bodyBoxes = boxes.filter((box) => !box.group.isHeading);
+  const body = bodyBoxes.length
+    ? {
+      minX: Math.min(...bodyBoxes.map((box) => box.x1)),
+      minY: Math.min(...bodyBoxes.map((box) => box.y1)),
+      maxX: Math.max(...bodyBoxes.map((box) => box.x2)),
+      maxY: Math.max(...bodyBoxes.map((box) => box.y2)),
+    }
+    : null;
+  const groupText = (group) => group.textRuns.map((run) => run.text).join('');
+  const chars = data.groups.reduce((sum, group) => sum + groupText(group).length, 0);
+  const bodyCount = bodyBoxes.length;
+  const bulletCount = bodyBoxes.filter((box) => groupText(box.group).startsWith('\u2022')).length;
+  const bodyWidth = body ? body.maxX - body.minX : 0;
+  const bodyHeight = body ? body.maxY - body.minY : 0;
+  const bodyFill = Math.min(1, (bodyWidth * bodyHeight) / Math.max(1, data.width * data.height));
+  const allWidth = all ? all.maxX - all.minX : 0;
+  const allHeight = all ? all.maxY - all.minY : 0;
+  const boundingFill = Math.min(1, (allWidth * allHeight) / Math.max(1, data.width * data.height));
+
+  const measureH = body && !fit.centerAll ? body : all;
+  const leftSpace = measureH ? measureH.minX : 0;
+  const rightSpace = measureH ? data.width - measureH.maxX : 0;
+  const hRatio = leftSpace + rightSpace > 0
+    ? Math.round((leftSpace / (leftSpace + rightSpace)) * 100)
+    : 50;
+
+  let topSpace;
+  let bottomSpace;
+  if (fit.centerAll || !headingBoxes.length) {
+    topSpace = all ? all.minY : 0;
+    bottomSpace = all ? data.height - all.maxY : 0;
+  }
+  else if (body) {
+    const headingBottom = Math.max(...headingBoxes.map((box) => box.y2));
+    topSpace = Math.max(0, body.minY - headingBottom);
+    bottomSpace = Math.max(0, data.height - body.maxY);
+  }
+  else {
+    topSpace = all ? all.minY : 0;
+    bottomSpace = all ? data.height - all.maxY : 0;
+  }
+  const vRatio = topSpace + bottomSpace > 0
+    ? Math.round((topSpace / (topSpace + bottomSpace)) * 100)
+    : 50;
+
+  const hWidth = measureH ? measureH.maxX - measureH.minX : 0;
+  const hGap = Math.abs(leftSpace - rightSpace);
+  const hImbalance = !fit.centerAll && hWidth < data.width * 0.94
+    && Math.max(leftSpace, rightSpace) > data.width * 0.12
+    && hGap > data.width * 0.14;
+
+  const availableTop = !fit.centerAll && headingBoxes.length
+    ? Math.max(...headingBoxes.map((box) => box.y2)) + 10
+    : 0;
+  const availableBottom = !fit.centerAll && headingBoxes.length
+    ? data.height - 10
+    : data.height;
+  const availableHeight = Math.max(1, availableBottom - availableTop);
+  const verticalCenter = body
+    ? body.minY + bodyHeight / 2
+    : all
+      ? all.minY + allHeight / 2
+      : 0;
+  const verticalOffset = Math.abs(verticalCenter - (availableTop + availableHeight / 2));
+  const vImbalance = !fit.centerAll && bodyHeight < availableHeight * 0.98
+    && verticalOffset > availableHeight * 0.12;
+
+  let density = 'balanced';
+  if (!data.centerAll) {
+    if (boundingFill >= LAYOUT_DENSE_FILL || chars >= LAYOUT_DENSE_CHARS || bodyCount >= LAYOUT_DENSE_ITEM_COUNT) {
+      density = 'dense';
+    }
+    else if (boundingFill <= LAYOUT_SPARSE_FILL && chars <= LAYOUT_SPARSE_CHARS && bodyCount <= 2) {
+      density = 'sparse';
+    }
+  }
+
+  return {
+    slide: slideIndex + 1,
+    chars,
+    bodyCount,
+    bulletCount,
+    bodyFill: Number(bodyFill.toFixed(3)),
+    boundingFill: Number(boundingFill.toFixed(3)),
+    hRatio,
+    vRatio,
+    hImbalance,
+    vImbalance,
+    density,
+    fit: {
+      centerAll: fit.centerAll,
+      scale: fit.scale,
+      layoutOffsetX: fit.layoutOffsetX,
+      layoutOffsetY: fit.layoutOffsetY,
+      centerOffsetX: fit.centerOffsetX,
+      centerOffsetY: fit.centerOffsetY,
+    },
+    preview: data.groups.map(groupText).join(' ').replace(/\s+/g, ' ').trim().slice(0, 80),
+  };
+}
+
+function printLayoutAudit(metrics) {
+  console.log('Layout audit:');
+  for (const metric of metrics) {
+    const slide = String(metric.slide).padStart(2, '0');
+    const h = `${metric.hRatio}/${100 - metric.hRatio}${metric.hImbalance ? '*' : ''}`;
+    const v = `${metric.vRatio}/${100 - metric.vRatio}${metric.vImbalance ? '*' : ''}`;
+    const fill = Math.round(metric.boundingFill * 100);
+    console.log(
+      `  Slide ${slide}: ${metric.density} fill ${fill}% items ${metric.bodyCount} H ${h} V ${v}`,
+    );
+  }
+  const dense = metrics.filter((metric) => metric.density === 'dense').map((metric) => metric.slide);
+  const sparse = metrics.filter((metric) => metric.density === 'sparse').map((metric) => metric.slide);
+  const hImbalance = metrics.filter((metric) => metric.hImbalance).map((metric) => metric.slide);
+  const vImbalance = metrics.filter((metric) => metric.vImbalance).map((metric) => metric.slide);
+  if (dense.length) console.log(`Dense slides: ${dense.join(', ')}`);
+  if (sparse.length) console.log(`Sparse slides: ${sparse.join(', ')}`);
+  if (hImbalance.length) console.log(`Horizontal imbalance: ${hImbalance.join(', ')}`);
+  if (vImbalance.length) console.log(`Vertical imbalance: ${vImbalance.join(', ')}`);
+}
+
+function collectLayoutIssues(metrics) {
+  const dense = metrics.filter((metric) => metric.density === 'dense').map((metric) => metric.slide);
+  const sparse = metrics.filter((metric) => metric.density === 'sparse').map((metric) => metric.slide);
+  const hImbalance = metrics.filter((metric) => metric.hImbalance).map((metric) => metric.slide);
+  const vImbalance = metrics.filter((metric) => metric.vImbalance).map((metric) => metric.slide);
+  return { dense, sparse, hImbalance, vImbalance };
+}
+
+async function writeLayoutReport(slides, fits, target) {
+  const metrics = slides.map((data, index) => analyzeSlideLayout(data, fits[index], index));
+  const issues = collectLayoutIssues(metrics);
+  const targetPath = path.resolve(process.cwd(), target);
+  const report = {
+    generatedAt: new Date().toISOString(),
+    slideCount: slides.length,
+    summary: issues,
+    slides: metrics,
+  };
+  await fs.writeFile(targetPath, `${JSON.stringify(report, null, 2)}\n`);
+  console.log(`Wrote layout audit to ${targetPath}`);
 }
 
 function fitSlide(data) {
@@ -402,39 +607,72 @@ function fitSlide(data) {
   const allMaxRight = Math.max(...data.groups.map((group) => group.x + group.w));
   const allMaxBottom = Math.max(...data.groups.map((group) => group.y + group.h));
   const overflows = allMaxBottom > data.height || allMaxRight > data.width;
+  const hasHeading = data.groups.some((group) => group.isHeading);
   const hasBodyContent = data.groups.some((group) => !group.isHeading);
-  const centerAll = Boolean(data.centerAll) || !hasBodyContent;
-  const measureGroups = !overflows && !centerAll
-    ? data.groups.filter((group) => !group.isHeading)
-    : data.groups;
-  const groups = measureGroups.length ? measureGroups : data.groups;
-  const minX = Math.min(...groups.map((group) => group.x));
-  const minY = Math.min(...groups.map((group) => group.y));
-  const maxRight = Math.max(...groups.map((group) => group.x + group.w));
-  const maxBottom = Math.max(...groups.map((group) => group.y + group.h));
-  const contentWidth = maxRight - minX;
-  const contentHeight = maxBottom - minY;
+  const centerAll = Boolean(data.centerAll) || !hasBodyContent || !hasHeading;
+  const contentWidth = allMaxRight - allMinX;
+  const contentHeight = allMaxBottom - allMinY;
   if (overflows) {
     const margin = 8;
     const scaleX = (data.width - margin * 2) / Math.max(1, contentWidth);
     const scaleY = (data.height - margin * 2) / Math.max(1, contentHeight);
     const scale = Math.min(1, scaleX, scaleY);
+    const fitWidth = contentWidth * scale;
+    const fitHeight = contentHeight * scale;
+    const layoutOffsetX = fitWidth < data.width - margin * 2
+      ? (data.width - fitWidth) / 2 - allMinX * scale
+      : margin - allMinX * scale;
+    const layoutOffsetY = fitHeight < data.height - margin * 2
+      ? (data.height - fitHeight) / 2 - allMinY * scale
+      : margin - allMinY * scale;
     return {
       scale,
-      layoutOffsetX: margin - minX * scale,
-      layoutOffsetY: margin - minY * scale,
+      layoutOffsetX,
+      layoutOffsetY,
       centerOffsetX: 0,
       centerOffsetY: 0,
       centerAll,
     };
   }
 
-  const centerOffsetX = contentWidth < data.width * 0.85
-      ? (data.width - contentWidth) / 2 - minX
+  if (centerAll) {
+    const centerOffsetX = contentWidth < data.width
+      ? (data.width - contentWidth) / 2 - allMinX
       : 0;
-  const centerOffsetY = centerAll && contentHeight < data.height * 0.8
-    ? (data.height - contentHeight) / 2 - minY
+    const centerOffsetY = contentHeight < data.height
+      ? (data.height - contentHeight) / 2 - allMinY
+      : 0;
+    return {
+      scale: 1,
+      layoutOffsetX: 0,
+      layoutOffsetY: 0,
+      centerOffsetX,
+      centerOffsetY,
+      centerAll,
+    };
+  }
+
+  const bodyGroups = data.groups.filter((group) => !group.isHeading);
+  const headingGroups = data.groups.filter((group) => group.isHeading);
+  const bodyMinX = Math.min(...bodyGroups.map((group) => group.x));
+  const bodyMinY = Math.min(...bodyGroups.map((group) => group.y));
+  const bodyMaxRight = Math.max(...bodyGroups.map((group) => group.x + group.w));
+  const bodyMaxBottom = Math.max(...bodyGroups.map((group) => group.y + group.h));
+  const bodyWidth = bodyMaxRight - bodyMinX;
+  const bodyHeight = bodyMaxBottom - bodyMinY;
+  const centerOffsetX = bodyWidth < data.width
+    ? (data.width - bodyWidth) / 2 - bodyMinX
     : 0;
+
+  const margin = 10;
+  const headingBottom = Math.max(0, ...headingGroups.map((group) => group.y + group.h));
+  const availableTop = headingBottom + Math.max(margin, 12);
+  const availableBottom = data.height - margin;
+  const availableHeight = Math.max(1, availableBottom - availableTop);
+  const centerOffsetY = bodyHeight < availableHeight * 0.98
+    ? availableTop + availableHeight / 2 - (bodyMinY + bodyHeight / 2)
+    : 0;
+
   return {
     scale: 1,
     layoutOffsetX: 0,
@@ -446,19 +684,7 @@ function fitSlide(data) {
 }
 
 function validateSlideLayout(data, fit, slideIndex = 0) {
-  const boxes = data.groups.map((group) => {
-    const centerX = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetX;
-    const centerY = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetY;
-    return {
-      group,
-      x1: group.x * fit.scale + fit.layoutOffsetX + centerX,
-      y1: group.y * fit.scale + fit.layoutOffsetY + centerY,
-      x2: (group.x + group.w) * fit.scale + fit.layoutOffsetX + centerX,
-      y2: (group.y + group.h) * fit.scale + fit.layoutOffsetY + centerY,
-      panelLeft: group.panelLeft * fit.scale + fit.layoutOffsetX + fit.centerOffsetX,
-      panelRight: group.panelRight * fit.scale + fit.layoutOffsetX + fit.centerOffsetX,
-    };
-  });
+  const boxes = getFinalGroupBoxes(data, fit);
 
   for (let i = 0; i < boxes.length; i += 1) {
     const a = boxes[i];
@@ -504,6 +730,8 @@ const portArg = Number(arg('port', '0')) || 0;
 const checkOnly = hasFlag('check-only');
 const allowBlank = hasFlag('allow-blank');
 const expectedSlides = Number(arg('expected-slides', '0')) || 0;
+const layoutReport = arg('layout-report');
+const strictLayout = hasFlag('strict-layout');
 
 const requireFromProject = createRequire(path.resolve(process.cwd(), 'package.json'));
 const cliPackagePath = requireFromProject.resolve('@slidev/cli/package.json');
@@ -533,6 +761,27 @@ try {
     throw new Error(`Editable PPTX validation failed: expected ${expectedSlides} slides, found ${slides.length}.`);
   }
   if (checkOnly) {
+    const fits = slides.map((data) => fitSlide(data));
+    const metrics = slides.map((data, index) => analyzeSlideLayout(data, fits[index], index));
+    printLayoutAudit(metrics);
+    if (layoutReport) {
+      await writeLayoutReport(slides, fits, layoutReport);
+    }
+    if (strictLayout) {
+      const issues = collectLayoutIssues(metrics);
+      const hasIssues = issues.dense.length
+        || issues.sparse.length
+        || issues.hImbalance.length
+        || issues.vImbalance.length;
+      if (hasIssues) {
+        throw new Error(
+          `Editable PPTX layout audit failed: dense ${issues.dense.join(', ') || '-'}; `
+          + `sparse ${issues.sparse.join(', ') || '-'}; `
+          + `H imbalance ${issues.hImbalance.join(', ') || '-'}; `
+          + `V imbalance ${issues.vImbalance.join(', ') || '-'}.`,
+        );
+      }
+    }
     const blankSlides = slides.filter((data) => data.groups.length === 0).length;
     console.log(`Checked ${slides.length} editable slides (${blankSlides} blank).`);
   } else {
@@ -551,16 +800,19 @@ try {
     pptx.author = 'Slidev editable export';
     pptx.company = 'Created using Slidev';
 
+    const fits = [];
     for (const [slideIndex, data] of slides.entries()) {
       const slide = pptx.addSlide();
       slide.background = { color: 'FFFFFF' };
       const fit = fitSlide(data);
+      fits.push(fit);
       validateSlideLayout(data, fit, slideIndex);
 
       for (const shape of data.shapes) {
+        const shapeOffset = getShapeOffsets(shape, data, fit);
         const shapeOptions = {
-          x: pxToInch(shape.x, fit.scale, fit.layoutOffsetX + fit.centerOffsetX),
-          y: pxToInch(shape.y, fit.scale, fit.layoutOffsetY + fit.centerOffsetY),
+          x: pxToInch(shape.x, fit.scale, fit.layoutOffsetX + shapeOffset.x),
+          y: pxToInch(shape.y, fit.scale, fit.layoutOffsetY + shapeOffset.y),
           w: pxToInch(shape.w, fit.scale),
           h: pxToInch(shape.h, fit.scale),
           fill: { color: shape.fill },
@@ -606,10 +858,30 @@ try {
       }
     }
 
+    const metrics = slides.map((data, index) => analyzeSlideLayout(data, fits[index], index));
+    if (strictLayout) {
+      const issues = collectLayoutIssues(metrics);
+      const hasIssues = issues.dense.length
+        || issues.sparse.length
+        || issues.hImbalance.length
+        || issues.vImbalance.length;
+      if (hasIssues) {
+        throw new Error(
+          `Editable PPTX layout audit failed: dense ${issues.dense.join(', ') || '-'}; `
+          + `sparse ${issues.sparse.join(', ') || '-'}; `
+          + `H imbalance ${issues.hImbalance.join(', ') || '-'}; `
+          + `V imbalance ${issues.vImbalance.join(', ') || '-'}.`,
+        );
+      }
+    }
+
     const target = path.resolve(process.cwd(), output || 'slides-editable.pptx');
     const buffer = await pptx.write({ outputType: 'nodebuffer' });
     await fs.writeFile(target, buffer);
     console.log(`Exported ${slides.length} editable slides to ${target}`);
+    if (layoutReport) {
+      await writeLayoutReport(slides, fits, layoutReport);
+    }
   }
 } finally {
   await browser?.close();

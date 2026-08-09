@@ -1,6 +1,6 @@
 ---
 name: slidev-editable-pptx
-description: Export and maintain editable PPTX files from Slidev lecture decks with enforced typography, centered balanced layouts, background-panel sizing, and overlap validation. Use when users ask to generate, regenerate, fix, or audit PPTX exports from Slidev projects, especially in the Chinese exam-prep lecture workspace, or when applying editable-text export rules to Slidev decks.
+description: Export and maintain editable PPTX files from Slidev lecture decks with enforced typography, centered balanced layouts, background-panel sizing, overlap validation, and content-density audits. Use when users ask to generate, regenerate, fix, or audit PPTX exports from Slidev projects, especially in the Chinese exam-prep lecture workspace, or when applying editable-text export rules to Slidev decks.
 ---
 
 # Slidev Editable Pptx
@@ -28,6 +28,8 @@ Before export, run a lightweight slide-count check:
 node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entry "../细生/6/protein-sorting-lecture/slides.md" --check-only --expected-slides 28
 ```
 
+`--check-only` also prints a layout audit with per-slide density, horizontal/vertical whitespace, and dense/sparse warnings. Add `--layout-report <path>` for structured JSON and `--strict-layout` to fail when density or whitespace issues remain.
+
 If Edge is not installed at the default path, pass an explicit browser:
 
 ```powershell
@@ -44,6 +46,8 @@ node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entr
 - For bullet or section content outside tables, use a single light background panel to constrain text width; tables keep cell boundaries.
 - Center content by default, including tables. Keep small titles (`h1`-`h4`) top-left on ordinary pages. Center the whole slide for cover, module-section, and summary pages.
 - Move text boxes and their background panels together as one unit. Distribute whitespace around the page edges instead of leaving blank space on one side.
+- Treat the body text block as one unit and center it horizontally and vertically in the remaining space below the page title. Card headings inside the body are part of that body block, not page-title decorations.
+- Keep information density even across the deck. Prefer 4-8 entries or 2-4 short point blocks per body page; dense slides should be split or compressed, sparse slides should be merged or expanded with a concise framework, comparison table, or summary block.
 - Avoid excessive empty background panels; merge or expand panels to keep the page balanced.
 
 ## Verification
@@ -51,6 +55,8 @@ node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entr
 The script validates before writing and throws when text boxes overlap, leave the slide, or exceed their background panel.
 
 The script also fails on blank slides and mismatched `--expected-slides` counts before writing. Use `--allow-blank` only when a blank slide is intentional.
+
+The layout audit flags dense/sparse pages and horizontal/vertical whitespace imbalances. Before final delivery, rebalance the source slides so `dense` and `sparse` pages are brought closer together, and verify again with `--check-only`.
 
 For independent verification, unzip the generated PPTX and check:
 
