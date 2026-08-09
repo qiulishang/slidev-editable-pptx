@@ -1,6 +1,6 @@
 ---
 name: slidev-editable-pptx
-description: Export and maintain editable PPTX files from Slidev lecture decks with enforced typography, centered balanced layouts, background-panel sizing, overlap validation, and content-density audits. Use when users ask to generate, regenerate, fix, or audit PPTX exports from Slidev projects, especially in the Chinese exam-prep lecture workspace, or when applying editable-text export rules to Slidev decks.
+description: Export and maintain editable PPTX files from Slidev lecture decks with enforced typography, centered balanced layouts, background-panel sizing, overlap validation, content-density audits, and outline- or user-confirmed time planning. Use when users ask to generate, regenerate, fix, or audit PPTX exports from Slidev projects, especially in the Chinese exam-prep lecture workspace, or when applying editable-text export rules to Slidev decks.
 ---
 
 # Slidev Editable Pptx
@@ -10,6 +10,14 @@ description: Export and maintain editable PPTX files from Slidev lecture decks w
 Generate editable PPTX files from Slidev decks by rendering slides in a browser, extracting text and panel geometry, then rebuilding slides as real PPTX text boxes. Native `slidev export --format pptx` produces full-page images, so do not use it when editable text is required.
 
 Default behavior does not start a Slidev dev server. Only start `pnpm dev` when the user explicitly asks for a live preview.
+
+## Time Planning
+
+When generating or regenerating deck content, resolve the time plan before deciding section depth and slide allocation:
+
+- If the chapter outline or source materials contain a time arrangement, follow that arrangement for content scope, section depth, and slide allocation.
+- If no outline or time arrangement exists, ask the user for their time plan before generating content, then follow that user-provided arrangement.
+- Keep the time plan as a generation constraint only. Do not add timings, schedule blocks, or percentage breakdowns to slides unless the user explicitly asks for them.
 
 ## Quick Start
 

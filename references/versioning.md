@@ -112,6 +112,7 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
+- `0.0.8`: add outline- or user-confirmed time planning rules and sync the workspace AGENTS guidance.
 - `0.0.7`: optimize PPTX layout with body-block horizontal/vertical centering, overflow-fit centering, content-density and whitespace audits, `--layout-report`, and `--strict-layout`.
 - `0.0.6`: flatten the version snapshot into the repository root and remove the `versions/<version>/` hierarchy.
 - `0.0.5`: default no Slidev dev server, shared dependency runner, blank-slide and slide-count preflight, unify Chinese font naming as 宋体.
