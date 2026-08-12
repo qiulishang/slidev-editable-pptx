@@ -52,8 +52,22 @@ function splitByFont(text) {
 }
 
 async function extractFromBrowser(page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const slideContainers = Array.from(document.querySelectorAll('.print-slide-container'));
+
+    async function assetToDataUrl(src) {
+      const response = await fetch(src);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch slide asset: ${src} (${response.status})`);
+      }
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
 
     function parseColor(value, opacity = 1) {
       const match = /rgba?\(([^)]+)\)/.exec(value || '');
@@ -192,7 +206,7 @@ async function extractFromBrowser(page) {
       return map;
     }
 
-    return slideContainers.map((slide) => {
+    return Promise.all(slideContainers.map(async (slide) => {
       const slideRect = slide.getBoundingClientRect();
       const slideWidth = slideRect.width;
       const slideHeight = slideRect.height;
@@ -241,6 +255,7 @@ async function extractFromBrowser(page) {
           align: style.textAlign,
           lineHeight: Number.parseFloat(style.lineHeight) || fontSize * 1.4,
           isListItem: Boolean(element.closest('li')),
+          hyperlink: element.closest('a')?.getAttribute('href') || null,
           panel: panelInfo,
         });
       }
@@ -325,6 +340,9 @@ async function extractFromBrowser(page) {
           isHeading: sorted.some((run) => ['h1', 'h2', 'h3', 'h4'].includes(run.tag)),
           align,
           lineSpacingMultiple: Math.max(1, first.lineHeight / first.fontSize),
+          hyperlink: sorted.every((run) => run.hyperlink === sorted[0].hyperlink)
+            ? sorted[0].hyperlink
+            : undefined,
           textRuns,
         };
       }));
@@ -361,6 +379,50 @@ async function extractFromBrowser(page) {
         }
       });
 
+      const images = [];
+      for (const img of slide.querySelectorAll('img')) {
+        const style = getComputedStyle(img);
+        const rect = img.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        if (rect.width < 24 || rect.height < 24) continue;
+        const src = img.currentSrc || img.getAttribute('src') || img.src;
+        if (!src) continue;
+        images.push({
+          x: rect.left - slideRect.left,
+          y: rect.top - slideRect.top,
+          w: rect.width,
+          h: rect.height,
+          data: await assetToDataUrl(src),
+          alt: img.alt || '',
+          hyperlink: img.closest('a')?.getAttribute('href') || undefined,
+        });
+      }
+
+      const media = [];
+      for (const element of slide.querySelectorAll('video, iframe')) {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        if (rect.width < 24 || rect.height < 24) continue;
+        const src = element.currentSrc || element.getAttribute('src') || element.src;
+        if (!src) continue;
+        const isVideo = element.tagName.toLowerCase() === 'video';
+        const mediaItem = {
+          x: rect.left - slideRect.left,
+          y: rect.top - slideRect.top,
+          w: rect.width,
+          h: rect.height,
+          type: isVideo ? 'video' : 'online',
+        };
+        if (isVideo) {
+          mediaItem.data = await assetToDataUrl(src);
+        }
+        else {
+          mediaItem.link = src;
+        }
+        media.push(mediaItem);
+      }
+
       const uniqueSyntheticPanels = new Map(
         Array.from(finalSyntheticPanels.values()).map((panelInfo) => [panelInfo.key, panelInfo]),
       );
@@ -383,8 +445,10 @@ async function extractFromBrowser(page) {
           || /总结|总复习/.test(slide.textContent || ''),
         groups: groupData,
         shapes: [...syntheticShapes, ...shapes],
+        images,
+        media,
       };
-    });
+    }));
   });
 }
 
@@ -436,7 +500,17 @@ function getShapeOffsets(shape, data, fit) {
 }
 
 function analyzeSlideLayout(data, fit, slideIndex) {
-  const boxes = getFinalGroupBoxes(data, fit);
+  const assetBoxes = [...(data.images || []), ...(data.media || [])].map((asset) => {
+    const offset = getShapeOffsets(asset, data, fit);
+    return {
+      x1: asset.x * fit.scale + fit.layoutOffsetX + offset.x,
+      y1: asset.y * fit.scale + fit.layoutOffsetY + offset.y,
+      x2: (asset.x + asset.w) * fit.scale + fit.layoutOffsetX + offset.x,
+      y2: (asset.y + asset.h) * fit.scale + fit.layoutOffsetY + offset.y,
+      group: null,
+    };
+  });
+  const boxes = [...getFinalGroupBoxes(data, fit), ...assetBoxes];
   const all = boxes.length
     ? {
       minX: Math.min(...boxes.map((box) => box.x1)),
@@ -445,8 +519,8 @@ function analyzeSlideLayout(data, fit, slideIndex) {
       maxY: Math.max(...boxes.map((box) => box.y2)),
     }
     : null;
-  const headingBoxes = boxes.filter((box) => box.group.isHeading);
-  const bodyBoxes = boxes.filter((box) => !box.group.isHeading);
+  const headingBoxes = boxes.filter((box) => box.group?.isHeading);
+  const bodyBoxes = boxes.filter((box) => !box.group?.isHeading);
   const body = bodyBoxes.length
     ? {
       minX: Math.min(...bodyBoxes.map((box) => box.x1)),
@@ -458,7 +532,7 @@ function analyzeSlideLayout(data, fit, slideIndex) {
   const groupText = (group) => group.textRuns.map((run) => run.text).join('');
   const chars = data.groups.reduce((sum, group) => sum + groupText(group).length, 0);
   const bodyCount = bodyBoxes.length;
-  const bulletCount = bodyBoxes.filter((box) => groupText(box.group).startsWith('\u2022')).length;
+  const bulletCount = bodyBoxes.filter((box) => box.group && groupText(box.group).startsWith('\u2022')).length;
   const bodyWidth = body ? body.maxX - body.minX : 0;
   const bodyHeight = body ? body.maxY - body.minY : 0;
   const bodyFill = Math.min(1, (bodyWidth * bodyHeight) / Math.max(1, data.width * data.height));
@@ -592,7 +666,8 @@ async function writeLayoutReport(slides, fits, target) {
 }
 
 function fitSlide(data) {
-  if (!data.groups.length) {
+  const assets = [...(data.images || []), ...(data.media || [])];
+  if (!data.groups.length && !assets.length) {
     return {
       scale: 1,
       layoutOffsetX: 0,
@@ -602,13 +677,19 @@ function fitSlide(data) {
       centerAll: false,
     };
   }
-  const allMinX = Math.min(...data.groups.map((group) => group.x));
-  const allMinY = Math.min(...data.groups.map((group) => group.y));
-  const allMaxRight = Math.max(...data.groups.map((group) => group.x + group.w));
-  const allMaxBottom = Math.max(...data.groups.map((group) => group.y + group.h));
+  const allMinX = Math.min(...data.groups.map((group) => group.x), ...assets.map((asset) => asset.x));
+  const allMinY = Math.min(...data.groups.map((group) => group.y), ...assets.map((asset) => asset.y));
+  const allMaxRight = Math.max(
+    ...data.groups.map((group) => group.x + group.w),
+    ...assets.map((asset) => asset.x + asset.w),
+  );
+  const allMaxBottom = Math.max(
+    ...data.groups.map((group) => group.y + group.h),
+    ...assets.map((asset) => asset.y + asset.h),
+  );
   const overflows = allMaxBottom > data.height || allMaxRight > data.width;
   const hasHeading = data.groups.some((group) => group.isHeading);
-  const hasBodyContent = data.groups.some((group) => !group.isHeading);
+  const hasBodyContent = data.groups.some((group) => !group.isHeading) || assets.length > 0;
   const centerAll = Boolean(data.centerAll) || !hasBodyContent || !hasHeading;
   const contentWidth = allMaxRight - allMinX;
   const contentHeight = allMaxBottom - allMinY;
@@ -654,10 +735,22 @@ function fitSlide(data) {
 
   const bodyGroups = data.groups.filter((group) => !group.isHeading);
   const headingGroups = data.groups.filter((group) => group.isHeading);
-  const bodyMinX = Math.min(...bodyGroups.map((group) => group.x));
-  const bodyMinY = Math.min(...bodyGroups.map((group) => group.y));
-  const bodyMaxRight = Math.max(...bodyGroups.map((group) => group.x + group.w));
-  const bodyMaxBottom = Math.max(...bodyGroups.map((group) => group.y + group.h));
+  const bodyMinX = Math.min(
+    ...bodyGroups.map((group) => group.x),
+    ...assets.map((asset) => asset.x),
+  );
+  const bodyMinY = Math.min(
+    ...bodyGroups.map((group) => group.y),
+    ...assets.map((asset) => asset.y),
+  );
+  const bodyMaxRight = Math.max(
+    ...bodyGroups.map((group) => group.x + group.w),
+    ...assets.map((asset) => asset.x + asset.w),
+  );
+  const bodyMaxBottom = Math.max(
+    ...bodyGroups.map((group) => group.y + group.h),
+    ...assets.map((asset) => asset.y + asset.h),
+  );
   const bodyWidth = bodyMaxRight - bodyMinX;
   const bodyHeight = bodyMaxBottom - bodyMinY;
   const centerOffsetX = bodyWidth < data.width
@@ -708,6 +801,20 @@ function validateSlideLayout(data, fit, slideIndex = 0) {
   }
 }
 
+function validateMediaLayout(data, fit, slideIndex = 0) {
+  const assets = [...(data.images || []), ...(data.media || [])];
+  for (const asset of assets) {
+    const offset = getShapeOffsets(asset, data, fit);
+    const x1 = asset.x * fit.scale + fit.layoutOffsetX + offset.x;
+    const y1 = asset.y * fit.scale + fit.layoutOffsetY + offset.y;
+    const x2 = x1 + asset.w * fit.scale;
+    const y2 = y1 + asset.h * fit.scale;
+    if (x1 < -1 || y1 < -1 || x2 > data.width + 1 || y2 > data.height + 1) {
+      throw new Error(`Editable PPTX validation failed on slide ${slideIndex + 1}: image or media is outside the slide. ${JSON.stringify(asset)} fit=${JSON.stringify(fit)} size=${data.width}x${data.height}`);
+    }
+  }
+}
+
 function validateNoBlankSlides(slides, allowBlank = false) {
   if (!slides.length) {
     throw new Error('Editable PPTX validation failed: no slides found.');
@@ -716,7 +823,9 @@ function validateNoBlankSlides(slides, allowBlank = false) {
     return;
   }
   const blank = slides
-    .map((data, index) => (data.groups.length ? null : index + 1))
+    .map((data, index) => (
+      data.groups.length || data.images.length || data.media.length ? null : index + 1
+    ))
     .filter(Boolean);
   if (blank.length) {
     throw new Error(`Editable PPTX validation failed: blank slide(s) ${blank.join(', ')}. Use --allow-blank to permit intentional blank slides.`);
@@ -751,8 +860,9 @@ try {
   const port = server.httpServer.address().port;
   browser = await chromium.launch({ executablePath, headless: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-  await page.goto(`http://localhost:${port}/print?print=true`, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.goto(`http://localhost:${port}/print?print=true`, { waitUntil: 'load', timeout: 60000 });
   await page.waitForSelector('.print-slide-container');
+  await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete));
   await page.waitForFunction(() => document.querySelectorAll('.slidev-slide-loading').length === 0);
 
   const slides = await extractFromBrowser(page);
@@ -762,6 +872,7 @@ try {
   }
   if (checkOnly) {
     const fits = slides.map((data) => fitSlide(data));
+    slides.forEach((data, index) => validateMediaLayout(data, fits[index], index));
     const metrics = slides.map((data, index) => analyzeSlideLayout(data, fits[index], index));
     printLayoutAudit(metrics);
     if (layoutReport) {
@@ -782,7 +893,9 @@ try {
         );
       }
     }
-    const blankSlides = slides.filter((data) => data.groups.length === 0).length;
+    const blankSlides = slides.filter((data) => (
+      data.groups.length === 0 && data.images.length === 0 && data.media.length === 0
+    )).length;
     console.log(`Checked ${slides.length} editable slides (${blankSlides} blank).`);
   } else {
     if (!output) {
@@ -807,6 +920,7 @@ try {
       const fit = fitSlide(data);
       fits.push(fit);
       validateSlideLayout(data, fit, slideIndex);
+      validateMediaLayout(data, fit, slideIndex);
 
       for (const shape of data.shapes) {
         const shapeOffset = getShapeOffsets(shape, data, fit);
@@ -823,6 +937,39 @@ try {
         slide.addShape(shape.type, shapeOptions);
       }
 
+      for (const image of data.images || []) {
+        const imageOffset = getShapeOffsets(image, data, fit);
+        const imageOptions = {
+          x: pxToInch(image.x, fit.scale, fit.layoutOffsetX + imageOffset.x),
+          y: pxToInch(image.y, fit.scale, fit.layoutOffsetY + imageOffset.y),
+          w: pxToInch(image.w, fit.scale),
+          h: pxToInch(image.h, fit.scale),
+          data: image.data,
+          altText: image.alt,
+        };
+        if (image.hyperlink) {
+          imageOptions.hyperlink = {
+            url: image.hyperlink,
+            tooltip: image.alt || image.hyperlink,
+          };
+        }
+        slide.addImage(imageOptions);
+      }
+
+      for (const mediaItem of data.media || []) {
+        const mediaOffset = getShapeOffsets(mediaItem, data, fit);
+        const mediaOptions = {
+          x: pxToInch(mediaItem.x, fit.scale, fit.layoutOffsetX + mediaOffset.x),
+          y: pxToInch(mediaItem.y, fit.scale, fit.layoutOffsetY + mediaOffset.y),
+          w: pxToInch(mediaItem.w, fit.scale),
+          h: pxToInch(mediaItem.h, fit.scale),
+          type: mediaItem.type,
+        };
+        if (mediaItem.link) mediaOptions.link = mediaItem.link;
+        if (mediaItem.data) mediaOptions.data = mediaItem.data;
+        slide.addMedia(mediaOptions);
+      }
+
       for (const group of data.groups) {
         const centerX = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetX;
         const centerY = group.isHeading && !fit.centerAll ? 0 : fit.centerOffsetY;
@@ -830,19 +977,26 @@ try {
         for (const run of group.textRuns) {
           const fontParts = splitByFont(run.text);
           for (const part of fontParts) {
+            const runOptions = {
+              fontSize: pxToPt(run.opts.fontSize * group.fontScale, fit.scale),
+              bold: run.opts.bold,
+              italic: run.opts.italic,
+              color: run.opts.color,
+              fontFace: part.font,
+            };
+            if (group.hyperlink) {
+              runOptions.hyperlink = {
+                url: group.hyperlink,
+                tooltip: group.hyperlink,
+              };
+            }
             textRuns.push({
               text: part.text,
-              options: {
-                fontSize: pxToPt(run.opts.fontSize * group.fontScale, fit.scale),
-                bold: run.opts.bold,
-                italic: run.opts.italic,
-                color: run.opts.color,
-                fontFace: part.font,
-              },
+              options: runOptions,
             });
           }
         }
-        slide.addText(textRuns, {
+        const textOptions = {
           x: pxToInch(group.x, fit.scale, fit.layoutOffsetX + centerX),
           y: pxToInch(group.y, fit.scale, fit.layoutOffsetY + centerY),
           w: pxToInch(group.w, fit.scale),
@@ -854,7 +1008,14 @@ try {
           wrap: group.wraps,
           isTextBox: true,
           lineSpacingMultiple: group.lineSpacingMultiple,
-        });
+        };
+        if (group.hyperlink) {
+          textOptions.hyperlink = {
+            url: group.hyperlink,
+            tooltip: group.hyperlink,
+          };
+        }
+        slide.addText(textRuns, textOptions);
       }
     }
 

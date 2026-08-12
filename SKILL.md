@@ -19,6 +19,28 @@ When generating or regenerating deck content, resolve the time plan before decid
 - If no outline or time arrangement exists, ask the user for their time plan before generating content, then follow that user-provided arrangement.
 - Keep the time plan as a generation constraint only. Do not add timings, schedule blocks, or percentage breakdowns to slides unless the user explicitly asks for them.
 
+## Content Depth and Expansion
+
+When the user reports that a deck is too thin, do not fix it by adding more headings alone. Expand the visible body text and keep the presenter script as the full explanation layer.
+
+- Treat the outline time allocation as a depth guide: allocate more body text to major concepts, motor proteins, dynamic mechanisms, drug mechanisms, and clinical/application links.
+- Use web or authoritative source material to verify mechanisms and examples before adding them. Do not copy web text verbatim; convert it into exam-oriented Chinese explanations.
+- Organize each body page as "conclusion + mechanism + example/application + exam cue". Core mechanisms must appear in visible slide text, not only inside `<!-- ... -->` presenter notes.
+- When presenter notes contain an explanation that is essential for answering exam questions, promote a distilled version to the visible slide as a bullet, small `[核心考点]`, `[易错提示]`, or `[考点提示]` block.
+- Add scenario pages when the outline has room, such as cell migration, organelle positioning, disease links, and motor coordination, instead of leaving abstract keyword lists.
+- Keep the layout rules below: if `--check-only` marks a page dense, split or compress it; if a page remains sparse after expansion, add a framework, table, scenario, or exam-tip block.
+
+## Non-Text Materials and Links
+
+For core mechanisms, key points, and outline prompts, verify the mechanism through web or authoritative sources, then insert relevant demonstration images, video links, or hyperlinks instead of leaving the page as a keyword-only list.
+
+- Search and verify sources before use. Prefer Wikimedia Commons, OpenStax, NIH/PMC, HHMI BioInteractive, and equivalent public or authoritative educational sources.
+- Download reused images into the chapter `图/` folder, reference them with local relative paths, and record source URLs and license notes in the presenter notes.
+- Prefer clickable links for videos and extended reading. Use local or PowerPoint-compatible online embeds only when they are necessary and have been tested in the export flow.
+- Keep non-text elements inside balanced panels. Images and media must participate in body centering, fit calculations, and boundary validation, just like text blocks.
+- Run `--check-only` after adding images or links and rebalance pages until the layout audit no longer reports dense, sparse, or one-sided whitespace issues.
+- The export script embeds `<img>` elements as real images in the PPTX and preserves `<a href>` text as clickable hyperlinks. Do not rely on raw URL strings as a substitute.
+
 ## Quick Start
 
 Run from the shared dependency runner in the lecture workspace:
@@ -28,7 +50,7 @@ cd "C:\Users\HP\OneDrive\Desktop\课程\slidev-runner"
 node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entry "../细生/6/protein-sorting-lecture/slides.md" --output "../细生/6/{chapter-title}-考研精讲.pptx"
 ```
 
-The script starts Slidev, renders the print page with Playwright and Edge, extracts text and backgrounds, writes the editable PPTX, and validates layout before writing.
+The script starts Slidev, renders the print page with Playwright and Edge, extracts text, images, media, backgrounds, and hyperlinks, writes the editable PPTX, and validates layout before writing.
 
 Before export, run a lightweight slide-count check:
 
@@ -55,6 +77,8 @@ node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entr
 - Center content by default, including tables. Keep small titles (`h1`-`h4`) top-left on ordinary pages. Center the whole slide for cover, module-section, and summary pages.
 - Move text boxes and their background panels together as one unit. Distribute whitespace around the page edges instead of leaving blank space on one side.
 - Treat the body text block as one unit and center it horizontally and vertically in the remaining space below the page title. Card headings inside the body are part of that body block, not page-title decorations.
+- Treat images, media, and hyperlink blocks as part of the body layout. Include their rectangles when calculating page fit, horizontal centering, vertical centering, and whitespace balance.
+- Keep images and media inside the slide and their intended panels; prevent them from overlapping text boxes or being pushed outside the slide by body centering.
 - Keep information density even across the deck. Prefer 4-8 entries or 2-4 short point blocks per body page; dense slides should be split or compressed, sparse slides should be merged or expanded with a concise framework, comparison table, or summary block.
 - Avoid excessive empty background panels; merge or expand panels to keep the page balanced.
 
@@ -72,6 +96,8 @@ For independent verification, unzip the generated PPTX and check:
 - No slide contains a full-page `<p:pic>` image.
 - Font runs use `<a:latin typeface="Times New Roman"/>` for Latin/digit text and `<a:ea typeface="宋体"/>` for Chinese text.
 - Text boxes do not overlap and stay inside their panels.
+- `ppt/media/` contains the expected image files, and slides using images contain `<a:blip>` references.
+- Slide relationship files contain external hyperlink relationships for `<a href>` content when links were added in the source.
 
 ## Shared Runner
 

@@ -112,6 +112,7 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
+- `0.0.9`: add image/media/link export support, embed `<img>` as PPTX images, preserve `<a href>` hyperlinks, and include non-text assets in page fit, layout audit, and boundary validation.
 - `0.0.8`: add outline- or user-confirmed time planning rules and sync the workspace AGENTS guidance.
 - `0.0.7`: optimize PPTX layout with body-block horizontal/vertical centering, overflow-fit centering, content-density and whitespace audits, `--layout-report`, and `--strict-layout`.
 - `0.0.6`: flatten the version snapshot into the repository root and remove the `versions/<version>/` hierarchy.
