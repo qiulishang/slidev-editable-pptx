@@ -41,6 +41,21 @@ For core mechanisms, key points, and outline prompts, verify the mechanism throu
 - Run `--check-only` after adding images or links and rebalance pages until the layout audit no longer reports dense, sparse, or one-sided whitespace issues.
 - The export script embeds `<img>` elements as real images in the PPTX and preserves `<a href>` text as clickable hyperlinks. Do not rely on raw URL strings as a substitute.
 
+## Lecture PDF Rule
+
+After producing a PPTX, also export a paired lecture PDF by default. The PDF must alternate one original slide page with one lecture-script page: page 1 is the original slide, page 2 explains it; page 3 is the second original slide, page 4 explains it, and so on.
+
+- Prepare script word counts from the outline time plan before writing the final scripts. Keep the total minute allocation and approximate word count per slide in a structured lecture-script file.
+- Each script page must state the corresponding original slide number, slide title, and corresponding outline content, plus estimated minutes and word count.
+- Write the lecture-script text so that reading it at the planned pace fills the assigned time. Recalculate total minutes and character counts before exporting.
+- Use the shared lecture PDF exporter:
+
+```powershell
+node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-lecture-pdf.mjs" --entry "../细生/12/知识点/slides.md" --script "../细生/12/知识点/讲稿内容.json" --output "../细生/12/知识点/细胞周期调控、染色体分离与减数分裂核心机制-讲稿.pdf"
+```
+
+- Keep the lecture-script JSON in the same chapter folder as the PPTX. Validate that its entry count matches the slide count before PDF export.
+
 ## Quick Start
 
 Run from the shared dependency runner in the lecture workspace:
@@ -59,6 +74,8 @@ node "C:\Users\HP\OneDrive\Desktop\课程\tools\export-editable-pptx.mjs" --entr
 ```
 
 `--check-only` also prints a layout audit with per-slide density, horizontal/vertical whitespace, and dense/sparse warnings. Add `--layout-report <path>` for structured JSON and `--strict-layout` to fail when density or whitespace issues remain.
+
+After the editable PPTX is finalized, also run the lecture PDF exporter so each original slide is followed by its script page.
 
 If Edge is not installed at the default path, pass an explicit browser:
 
@@ -98,6 +115,7 @@ For independent verification, unzip the generated PPTX and check:
 - Text boxes do not overlap and stay inside their panels.
 - `ppt/media/` contains the expected image files, and slides using images contain `<a:blip>` references.
 - Slide relationship files contain external hyperlink relationships for `<a href>` content when links were added in the source.
+- The paired lecture PDF has `2 * slideCount` pages when the source deck is `slideCount` slides.
 
 ## Shared Runner
 
@@ -110,4 +128,5 @@ Keep one shared Slidev dependency project at `C:\Users\HP\OneDrive\Desktop\课�
 - Keep only the current version snapshot directly at the repository root; delete obsolete snapshots and tags from local and GitHub as part of each version update.
 - Always push updates through the SSH deploy key documented in `references/versioning.md`; do not switch back to HTTPS.
 - Keep `scripts/export-editable-pptx.mjs` in sync with the workspace `tools/export-editable-pptx.mjs`.
+- Keep `scripts/export-lecture-pdf.mjs` in sync with the workspace `tools/export-lecture-pdf.mjs`.
 - Update this SKILL.md and the workspace `AGENTS.md` together when export rules change.

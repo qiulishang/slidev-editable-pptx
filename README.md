@@ -19,6 +19,7 @@
 - 图片与链接：`<img>` 会作为真实图片嵌入 PPTX，`<a href>` 会保留为可点击链接，并支持视频/iframe 导出。
 - 非文本排版：图片、媒体与文字一起参与页面居中、越界和留白校验。
 - 时间规划：有大纲时遵循大纲时间安排生成内容；没有大纲时先询问用户时间规划，再按用户安排控制内容深度与篇幅。
+- 讲稿 PDF：导出 PPTX 后默认生成配套讲稿 PDF，按“原课件页 + 讲稿页”交替排版，讲稿按大纲时间规划字数。
 - AI Agent 可用：`SKILL.md` 可直接作为 Codex skill 加载，脚本也可作为独立 CLI 使用。
 
 ## 为什么不用原生 PPTX 导出
@@ -33,6 +34,7 @@
 4. 对文本做 CJK/Latin 字体拆分。
 5. 使用 `pptxgenjs` 重建 PPTX，包含文本、形状、表格、图片、媒体和可点击链接。
 6. 导出前校验空白页、页数、文本框重叠/越界/超出背景板，以及布局密度。
+7. 读取讲稿 JSON，按原课件页数生成 2 倍页数的讲稿 PDF，每页原课件后紧跟一页讲稿。
 
 ## 快速开始
 
@@ -66,6 +68,15 @@ node /path/to/export-editable-pptx.mjs \
   --check-only \
   --strict-layout \
   --layout-report layout.json
+```
+
+生成配套讲稿 PDF：
+
+```bash
+node /path/to/export-lecture-pdf.mjs \
+  --entry slides.md \
+  --script 讲稿内容.json \
+  --output output/考研精讲-讲稿.pdf
 ```
 
 如果默认浏览器路径不可用，通过 `--executable-path` 指定 Edge、Chrome 或 Chromium。
@@ -107,6 +118,7 @@ node /path/to/export-editable-pptx.mjs \
 3. 有 `大纲.txt` 时遵循大纲时间安排；没有时先询问用户时间规划，再生成对应内容。
 4. 在核心机制、重难点或大纲提示处检索并插入图片、动画/视频链接或超链接，记录来源与授权。
 5. 调整后重新预检，再导出可编辑 PPTX。
+6. 导出 PPTX 后默认再生成配套讲稿 PDF，并校验其页数为原课件页数的 2 倍。
 
 ## 可复用实现思路
 
@@ -123,7 +135,8 @@ node /path/to/export-editable-pptx.mjs \
 ├── SKILL.md                    # AI Agent skill 说明
 ├── agents/openai.yaml          # Agent 元信息
 ├── scripts/
-│   └── export-editable-pptx.mjs
+│   ├── export-editable-pptx.mjs
+│   └── export-lecture-pdf.mjs
 └── references/
     └── versioning.md
 ```
@@ -134,7 +147,7 @@ Slidev, PPTX, editable PPTX, Markdown slides, Slidev 导出 PPTX, 可编辑 PPTX
 
 ## 版本
 
-- `0.0.9`
+- `0.1.0`
 
 ## 维护
 
