@@ -61,6 +61,9 @@ async function extractFromBrowser(page) {
         throw new Error(`Failed to fetch slide asset: ${src} (${response.status})`);
       }
       const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error(`Failed to load slide asset as an image: ${src} (${blob.type})`);
+      }
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
@@ -206,7 +209,7 @@ async function extractFromBrowser(page) {
       return map;
     }
 
-    return Promise.all(slideContainers.map(async (slide) => {
+    return Promise.all(slideContainers.map(async (slide, slideIndex) => {
       const slideRect = slide.getBoundingClientRect();
       const slideWidth = slideRect.width;
       const slideHeight = slideRect.height;
@@ -387,6 +390,9 @@ async function extractFromBrowser(page) {
         if (rect.width < 24 || rect.height < 24) continue;
         const src = img.currentSrc || img.getAttribute('src') || img.src;
         if (!src) continue;
+        if (!img.naturalWidth || !img.naturalHeight) {
+          throw new Error(`Slide ${slideIndex + 1} image failed to load (natural size 0): ${src}`);
+        }
         images.push({
           x: rect.left - slideRect.left,
           y: rect.top - slideRect.top,
@@ -753,7 +759,7 @@ function fitSlide(data) {
   );
   const bodyWidth = bodyMaxRight - bodyMinX;
   const bodyHeight = bodyMaxBottom - bodyMinY;
-  const centerOffsetX = bodyWidth < data.width
+  const centerOffsetX = !headingGroups.length && bodyWidth < data.width
     ? (data.width - bodyWidth) / 2 - bodyMinX
     : 0;
 
@@ -864,6 +870,14 @@ try {
   await page.waitForSelector('.print-slide-container');
   await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete));
   await page.waitForFunction(() => document.querySelectorAll('.slidev-slide-loading').length === 0);
+  await page.waitForFunction(() => {
+    const slides = Array.from(document.querySelectorAll('.print-slide-container'));
+    return slides.length > 0
+      && slides.every((slide) => (
+        (slide.textContent || '').trim().length > 0
+        || slide.querySelector('img, video, iframe')
+      ));
+  }, { timeout: 60000 }).catch(() => {});
 
   const slides = await extractFromBrowser(page);
   validateNoBlankSlides(slides, allowBlank);
@@ -1009,12 +1023,8 @@ try {
           isTextBox: true,
           lineSpacingMultiple: group.lineSpacingMultiple,
         };
-        if (group.hyperlink) {
-          textOptions.hyperlink = {
-            url: group.hyperlink,
-            tooltip: group.hyperlink,
-          };
-        }
+        // Text-run hyperlinks are written above; duplicating them on the text box
+        // makes PptxGenJS emit an invalid rIdundefined shape hyperlink.
         slide.addText(textRuns, textOptions);
       }
     }

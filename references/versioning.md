@@ -112,6 +112,7 @@ If `gh` is not on `PATH`, use the full path:
 
 ## Version History
 
+- `0.2.0`: fix body centering rule -- `layout: default` pages with a title must NOT have body content horizontally centered; add detailed Layout Rules section with centering, density, and H-ratio guidance; add troubleshooting entries for left/right shift; document export script `fitSlide()` centering logic.
 - `0.1.0`: add the paired lecture PDF workflow; after PPTX export, generate a PDF where each original slide is followed by a lecture-script page prepared from the outline time plan.
 - `0.0.9`: add image/media/link export support, embed `<img>` as PPTX images, preserve `<a href>` hyperlinks, and include non-text assets in page fit, layout audit, and boundary validation.
 - `0.0.8`: add outline- or user-confirmed time planning rules and sync the workspace AGENTS guidance.
